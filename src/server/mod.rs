@@ -219,7 +219,6 @@ impl<B: AsRef<[u8]> + 'static> Http<B> {
     /// Bind the provided `listener` and return a server.
     ///
     /// See `Http::bind`.
-
     pub fn bind_listener<S, Bd>(&self, core: Core, listener: TcpListener, new_service: S) -> ::Result<Server<S, Bd>>
         where S: NewService<Request = Request, Response = Response<Bd>, Error = ::Error> + 'static,
               Bd: Stream<Item=B, Error=::Error>,
@@ -234,7 +233,6 @@ impl<B: AsRef<[u8]> + 'static> Http<B> {
             listener: listener,
             protocol: self.clone(),
             shutdown_timeout: Duration::new(1, 0),
-            no_proto: false,
         })
     }
 
