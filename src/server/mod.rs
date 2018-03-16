@@ -57,7 +57,7 @@ pub struct Http<B = ::Chunk> {
     max_buf_size: Option<usize>,
     keep_alive: bool,
     pipeline: bool,
-    sleep_on_errors: bool,
+    sleep_on_errors: Option<Duration>,
     _marker: PhantomData<B>,
 }
 
@@ -104,7 +104,7 @@ pub struct AddrIncoming {
     keep_alive_timeout: Option<Duration>,
     listener: TcpListener,
     handle: Handle,
-    sleep_on_errors: bool,
+    sleep_on_errors: Option<Duration>,
     timeout: Option<Timeout>,
 }
 
@@ -148,7 +148,7 @@ impl<B: AsRef<[u8]> + 'static> Http<B> {
             keep_alive: true,
             max_buf_size: None,
             pipeline: false,
-            sleep_on_errors: false,
+            sleep_on_errors: Some(Duration::from_millis(10)),
             _marker: PhantomData,
         }
     }
@@ -184,8 +184,8 @@ impl<B: AsRef<[u8]> + 'static> Http<B> {
     /// is used in that case.
     ///
     /// Default is false.
-    pub fn sleep_on_errors(&mut self, enabled: bool) -> &mut Self {
-        self.sleep_on_errors = enabled;
+    pub fn sleep_on_errors(&mut self, duration: Option<Duration>) -> &mut Self {
+        self.sleep_on_errors = duration;
         self
     }
 
@@ -225,7 +225,7 @@ impl<B: AsRef<[u8]> + 'static> Http<B> {
     {
         // let core = try!(Core::new());
         // let handle = core.handle();
-        // let listener = try!(TcpListener::bind(addr, &handle));
+        // let listener = try!(TcpListener::bind_listener(addr, listener, &handle));
 
         Ok(Server {
             new_service: new_service,
@@ -657,7 +657,7 @@ mod unnameable {
 // ===== impl AddrIncoming =====
 
 impl AddrIncoming {
-    fn new(listener: TcpListener, handle: Handle, sleep_on_errors: bool) -> io::Result<AddrIncoming> {
+    fn new(listener: TcpListener, handle: Handle, sleep_on_errors: Option<Duration>) -> io::Result<AddrIncoming> {
          Ok(AddrIncoming {
             addr: listener.local_addr()?,
             keep_alive_timeout: None,
@@ -703,29 +703,28 @@ impl Stream for AddrIncoming {
                     return Ok(Async::Ready(Some(AddrStream::new(socket, addr))));
                 },
                 Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => return Ok(Async::NotReady),
-                Err(ref e) if self.sleep_on_errors => {
-                    // Connection errors can be ignored directly, continue by
-                    // accepting the next request.
-                    if connection_error(e) {
-                        continue;
-                    }
-                    // Sleep 10ms.
-                    let delay = ::std::time::Duration::from_millis(10);
-                    debug!("accept error: {}; sleeping {:?}",
-                        e, delay);
-                    let mut timeout = Timeout::new(delay, &self.handle)
-                        .expect("can always set a timeout");
-                    let result = timeout.poll()
-                        .expect("timeout never fails");
-                    match result {
-                        Async::Ready(()) => continue,
-                        Async::NotReady => {
-                            self.timeout = Some(timeout);
-                            return Ok(Async::NotReady);
+                Err(e) => {
+                    if let Some(delay) = self.sleep_on_errors {
+                        // Connection errors can be ignored directly, continue by
+                        // accepting the next request.
+                        if connection_error(&e) {
+                            continue;
+                        }
+                        debug!("accept error: {}; sleeping {:?}", e, delay);
+                        let mut timeout = Timeout::new(delay, &self.handle)
+                            .expect("can always set a timeout");
+                        let result = timeout.poll()
+                            .expect("timeout never fails");
+                        match result {
+                            Async::Ready(()) => continue,
+                            Async::NotReady => {
+                                self.timeout = Some(timeout);
+                                return Ok(Async::NotReady);
+                            }
                         }
                     }
-                },
-                Err(e) => return Err(e),
+                    return Err(e);
+                }
             }
         }
     }

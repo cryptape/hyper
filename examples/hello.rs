@@ -5,6 +5,7 @@ extern crate pretty_env_logger;
 
 use hyper::header::{ContentLength, ContentType};
 use hyper::server::{Http, Response, const_service, service_fn};
+use std::time::Duration;
 
 static PHRASE: &'static [u8] = b"Hello World!";
 
@@ -20,7 +21,7 @@ fn main() {
     }));
 
     let server = Http::new()
-        .sleep_on_errors(true)
+        .sleep_on_errors(Some(Duration::from_millis(100)))
         .bind(&addr, new_service)
         .unwrap();
     println!("Listening on http://{} with 1 thread.", server.local_addr().unwrap());
