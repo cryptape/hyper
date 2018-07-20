@@ -33,7 +33,7 @@ percent-encoding = "1.0"
 relay = "0.1"
 time = "0.1"
 tokio-core = "0.1.11"
-tokio-proto = { git = "https://github.com/cryptape/tokio-proto.git", optional = true }
+tokio-proto = { git = "https://github.com/cryptape/tokio-proto.git", rev = "7419e3aaca5d89a497acaf379471d53671a94159", optional = true }
 tokio-service = "0.1"
 tokio-io = "0.1"
 unicase = "2.0"
